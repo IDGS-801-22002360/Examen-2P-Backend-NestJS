@@ -1,77 +1,56 @@
-// src/item/item.service.ts
-
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import { Firestore } from 'firebase-admin/firestore';
-import * as productsData from '../products.json';
-import type { Product, Sale } from './interfaces/item.interface';
+import { Injectable } from '@nestjs/common';
+import { Product } from './interfaces/item.interface';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 
 @Injectable()
 export class ItemService {
-  private readonly products: Product[] = (productsData as any).default as Product[];
-  private readonly salesCollection = 'sales';
+  private readonly productsPath = path.join(
+    process.cwd(),
+    'src',
+    'products.json',
+  );
+  private productsCache: Product[] | null = null;
 
-  constructor(@Inject('FIRESTORE_DB') private readonly firestore: Firestore) { }
-
-  findAll(query: string) {
+  async findAll(query?: string): Promise<Product[]> {
+    const products = await this.loadProducts();
+    
     if (!query) {
-      return this.products.slice(0, 10).map((p) => ({
-        id: p.id,
-        title: p.title,
-        price: p.price,
-        category: p.category,
-        snippet: p.description.substring(0, 100) + '...',
-      }));
+      return products;
     }
-    const q = query.toLowerCase();
-    const results = this.products.filter(
-      (p) =>
-        p.title.toLowerCase().includes(q) ||
-        p.description.toLowerCase().includes(q),
-    );
 
-    return results.map((p) => ({
-      id: p.id,
-      title: p.title,
-      price: p.price,
-      category: p.category,
-      snippet: p.description.substring(0, 100) + '...',
-    }));
+    query = query.toLowerCase();
+    return products.filter(
+      (product) =>
+        product.title.toLowerCase().includes(query) ||
+        product.description.toLowerCase().includes(query) ||
+        product.category.toLowerCase().includes(query) ||
+        product.tags.some((tag) => tag.toLowerCase().includes(query)),
+    );
   }
 
   async findOne(id: string): Promise<Product> {
-    const productId = parseInt(id, 10);
-    const product = this.products.find((p) => p.id === productId);
-
+    const products = await this.loadProducts();
+    const product = products.find((p) => p.id === parseInt(id));
     if (!product) {
-      throw new NotFoundException(`Producto con ID "${id}" no encontrado`);
+      throw new Error('Product not found');
     }
     return product;
   }
 
-  async addSale(createSaleDto: {
-    productId: string;
-    productName: string;
-    price: number;
-  }) {
-    const newSale = {
-      ...createSaleDto,
-      date: new Date().toISOString(),
-    };
+  private async loadProducts(): Promise<Product[]> {
+    if (this.productsCache) {
+      return this.productsCache;
+    }
 
-    await this.firestore.collection(this.salesCollection).add(newSale);
-
-    return { success: true, message: 'Compra registrada' };
+    try {
+      const data = await fs.readFile(this.productsPath, 'utf8');
+      const products = JSON.parse(data) as Product[];
+      this.productsCache = products;
+      return products;
+    } catch (error) {
+      console.error('Error loading products:', error);
+      throw new Error('Could not load products');
+    }
   }
-
-  async getSales(): Promise<Sale[]> {
-    const snapshot = await this.firestore.collection(this.salesCollection).get();
-
-    const sales = snapshot.docs.map((doc) => ({
-      ...doc.data(),
-      id: doc.id,
-    })) as Sale[];
-
-    return sales;
-  }
-  //
 }
