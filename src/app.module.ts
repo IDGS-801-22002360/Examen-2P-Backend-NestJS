@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { SalesModule } from './sales/sales.module';
+import { ItemModule } from './item/item.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -28,11 +29,12 @@ import { SalesModule } from './sales/sales.module';
             autoLoadEntities: true,
             synchronize: true,
             ssl: {
-              rejectUnauthorized: false,
+              rejectUnauthorized: true,
             },
           },
     ),
     SalesModule,
+    ItemModule,
   ],
   controllers: [],
   providers: [],
